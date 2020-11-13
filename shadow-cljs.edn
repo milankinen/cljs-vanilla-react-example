@@ -1,0 +1,10 @@
+{:dev-http
+ {8080 "public"}
+ :nrepl
+ {:port 9880}
+ :lein
+ {:profile "+cljs"}
+ :builds
+ {:app
+  {:target  :browser
+   :modules {:main {:init-fn tsers.app/main}}}}}
