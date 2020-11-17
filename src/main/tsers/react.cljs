@@ -64,13 +64,22 @@
         (.set js-prop-cache prop-s res)
         res))))
 
+(defn- jsfy-prop-key [k]
+  (cond
+    (keyword? k) (keyword->js-prop-name k)
+    (string? k) k
+    :else (throw (js/Error. (str "Invalid intrinsic property key" (pr-str k))))))
+
 (defn- jsfy-prop-value [x]
   (cond
     (or (primitive? x)
         (fn? x)) x
     (keyword? x) (fq-name x)
     (symbol? x) (fq-name x)
-    (map? x) (jsfy-props x)
+    (map? x) (let [val #js {}]
+               (doseq [[k v] x]
+                 (unchecked-set val (jsfy-prop-key k) (jsfy-prop-value v)))
+               val)
     (coll? x) (let [val #js []]
                 (doseq [v x]
                   (.push val (jsfy-prop-value v)))
@@ -90,18 +99,14 @@
                    (string/join " "))
     :else (pr-str x)))
 
-(defn- jsfy-props [props]
+(defn- jsfy-element-props [props]
   (if (some? props)
     (let [js-props #js {}]
       (doseq [[k v] props]
-        (cond
-          (= :class k)
-          (unchecked-set js-props "className" (jsfy-class-name v))
-          (keyword? k)
-          (unchecked-set js-props (keyword->js-prop-name k) (jsfy-prop-value v))
-          (string? k)
-          (unchecked-set js-props k (jsfy-prop-value v))
-          :else (throw (js/Error. (str "Invalid intrinsic property name" (pr-str k))))))
+        (case k
+          :class (unchecked-set js-props "className" (jsfy-class-name v))
+          :children nil
+          (unchecked-set js-props (jsfy-prop-key k) (jsfy-prop-value v))))
       js-props)
     #js {}))
 
@@ -129,16 +134,19 @@
     ($ tag-name js-props children)))
 
 (defn- unwrap-delegated-children [children]
-  (if (and (empty? (next children))
-           (::children (meta (first children))))
-    (first children)
-    children))
+  (when (seq children)
+    (if (and (empty? (next children))
+             (::children (meta (first children))))
+      (first children)
+      children)))
 
 (defn- unwrap-props [wrapped-props]
   (let [children (some-> (unchecked-get wrapped-props "c")
                          (vary-meta assoc ::children true))
         props (or (unchecked-get wrapped-props "p") {})]
-    (assoc props :children children)))
+    (if children
+      (assoc props :children children)
+      props)))
 
 (defn- wrap-props [props children]
   (if-some [key (:key props)]
@@ -181,7 +189,11 @@
 
 (defn- hiccup->element [[type & [props & children :as props+children] :as hiccup]]
   (let [props (when (map? props) props)
-        children (unwrap-delegated-children (if props children props+children))]
+        children (if props
+                   (if (>= (count hiccup) 3)
+                     (unwrap-delegated-children children)
+                     (:children props))
+                   (unwrap-delegated-children props+children))]
     (cond
       (= :<> type) (create-fragment props children)
       (or (keyword? type)
