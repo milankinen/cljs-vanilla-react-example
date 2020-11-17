@@ -1,7 +1,7 @@
 (ns tsers.react
   (:require [clojure.string :as string]
             [goog.object :as gobj]
-            ["react" :as react]
+            ["react" :as reactjs]
             ["react-dom" :as react-dom]))
 
 ; cache for parsed hiccup tags and converted js props
@@ -109,13 +109,13 @@
   (let [args #js [type js-props]]
     (doseq [child cljs-children]
       (.push args (as-element child)))
-    (.apply react/createElement nil args)))
+    (.apply reactjs/createElement nil args)))
 
 (defn- create-fragment [props children]
-  ($ react/Fragment (jsfy-props props) children))
+  ($ reactjs/Fragment (jsfy-element-props props) children))
 
 (defn- create-intrinsic-element [parsed-tag props children]
-  (let [js-props (jsfy-props props)
+  (let [js-props (jsfy-element-props props)
         tag-name (unchecked-get parsed-tag "tag")
         id (unchecked-get parsed-tag "id")
         classes (unchecked-get parsed-tag "classes")]
@@ -170,14 +170,14 @@
   (let [type (if memo?
                (or (unchecked-get component memo-wrapper-key)
                    (let [wrapper (wrapper-component component)
-                         memo (react/memo wrapper memo-eq)]
+                         memo (reactjs/memo wrapper memo-eq)]
                      (unchecked-set component memo-wrapper-key memo)
                      memo))
                (or (unchecked-get component wrapper-key)
                    (let [wrapper (wrapper-component component)]
                      (unchecked-set component wrapper-key wrapper)
                      wrapper)))]
-    (react/createElement type (wrap-props props children))))
+    (reactjs/createElement type (wrap-props props children))))
 
 (defn- hiccup->element [[type & [props & children :as props+children] :as hiccup]]
   (let [props (when (map? props) props)
@@ -233,8 +233,8 @@
                    (fn [] (.. (js-this) -props -children))}
         ctor (fn [props ctx]
                (let [this (js-this)]
-                 (.call react/Component this props ctx)))]
-    (gobj/extend (.-prototype ctor) (.-prototype react/Component) proto)
+                 (.call reactjs/Component this props ctx)))]
+    (gobj/extend (.-prototype ctor) (.-prototype reactjs/Component) proto)
     (set! (.-displayName ctor) "ErrorBoundary")
     (set! (.. ctor -prototype -constructor) ctor)
     ctor))
@@ -277,7 +277,7 @@
   "Native React.createElement. Does **not** perform any conversions,
    see [[as-element]] if you need to convert hiccup elements to
    native React elements."
-  react/createElement)
+  reactjs/createElement)
 
 (defn render [element container]
   (react-dom/render (as-element element) container))
@@ -293,7 +293,7 @@
      ...)
    ```"
   [initial]
-  (let [xs (react/useState initial)
+  (let [xs (reactjs/useState initial)
         state (aget xs 0)
         js-set-state (aget xs 1)
         set-state (or (unchecked-get js-set-state wrapper-key)
@@ -310,7 +310,7 @@
   "Wrapper for React `useRef` hook. Returns ClojureScript atom instead of
    mutable JS object. Ref atom can be used as :ref in intrinsic elements."
   [initial]
-  (let [ref (react/useRef nil)]
+  (let [ref (reactjs/useRef nil)]
     (or (unchecked-get ref "current")
         (let [a (ref-atom initial)]
           (unchecked-set ref "current" a)
@@ -344,7 +344,7 @@
   {:pre [(fn? eff)
          (or (vector? deps)
              (nil? deps))]}
-  (react/useEffect (wrap-eff eff) (jsfy-deps-array deps)))
+  (reactjs/useEffect (wrap-eff eff) (jsfy-deps-array deps)))
 
 (defn use-layout-effect
   "Wrapper for React `useLayoutEffect` hook. Has same dependency
@@ -353,7 +353,7 @@
   {:pre [(fn? eff)
          (or (vector? deps)
              (nil? deps))]}
-  (react/useEffect (wrap-eff eff) (jsfy-deps-array deps)))
+  (reactjs/useEffect (wrap-eff eff) (jsfy-deps-array deps)))
 
 (defn use-memo
   "Wrapper for React `useMemo` hook. Has same dependency
@@ -362,7 +362,7 @@
   {:pre [(fn? f)
          (or (vector? deps)
              (nil? deps))]}
-  (react/useMemo f (jsfy-deps-array deps)))
+  (reactjs/useMemo f (jsfy-deps-array deps)))
 
 (defn use-callback
   "Wrapper for React `useCallback` hook. Has same dependency
@@ -371,13 +371,13 @@
   {:pre [(fn? cb)
          (or (vector? deps)
              (nil? deps))]}
-  (react/useCallback cb (jsfy-deps-array deps)))
+  (reactjs/useCallback cb (jsfy-deps-array deps)))
 
 (defn create-context
   "Creates a new React context that can be used with [[context-provider]]
    component and [[use-context]] hook."
   [default-value]
-  (react/createContext default-value))
+  (reactjs/createContext default-value))
 
 (defn use-context
   "Wrapper for React `useContext` hook. Accepts context created with
@@ -385,7 +385,7 @@
   [context]
   {:pre [(some? context)
          (some? (.-Provider context))]}
-  (react/useContext context))
+  (reactjs/useContext context))
 
 (defn context-provider
   "Wrapper for React's context provider component.
@@ -410,14 +410,14 @@
     ...]
   ```"
   [{:keys [fallback children]}]
-  ($ react/Suspense #js {:fallback (as-element fallback)} children))
+  ($ reactjs/Suspense #js {:fallback (as-element fallback)} children))
 
 (defn lazy
   "Wrapper for `React.lazy`. Expects promise to import a valid
    **cljs** react component (component that accepts persistent map
    as props and returns hiccup)."
   [loader-f]
-  (let [type (react/lazy
+  (let [type (reactjs/lazy
                (fn []
                  (.then (loader-f)
                         (fn [import]
